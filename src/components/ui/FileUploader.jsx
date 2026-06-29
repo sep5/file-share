@@ -34,18 +34,31 @@ function FileUploader({ onUploadSuccess, onError }) {
     const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : 'bin';
     const safePath = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
 
-    /* Content-Type을 HTTP 헤더 안전 ASCII 문자(0x20-0x7E)로 검증
-       일부 브라우저·OS에서 file.type에 비 ASCII 반환 시 헤더 에러 방지 */
+    /* Content-Type: 비ASCII 방어 (일부 브라우저에서 비정상 MIME 반환 가능) */
     const rawType = typeof file.type === 'string' ? file.type : '';
-    const contentType = /^[\x20-\x7E]+$/.test(rawType)
+    const contentType = /^[\x20-\x7E]+$/.test(rawType) && rawType.length > 0
       ? rawType
       : 'application/octet-stream';
 
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    /* .trim(): GitHub Secrets 복붙 시 발생하는 trailing newline/CR 제거
+       fetch Headers는 0x00·0x0A·0x0D 등 제어 문자를 허용하지 않음 */
+    const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL ?? '').trim();
+    const supabaseKey = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim();
 
     if (!supabaseUrl || !supabaseKey) {
       const msg = 'Supabase 환경변수 누락 — 관리자에게 문의하세요.';
+      updateItem(idx, { status: 'error', progress: 0, errorMsg: msg });
+      return { ok: false, error: msg };
+    }
+
+    /* 헤더 값 전체 ASCII 검증 — 비ASCII 문자가 있으면 조기 실패 */
+    if (!/^[\x20-\x7E]+$/.test(supabaseKey)) {
+      const msg = 'API 키에 비정상 문자 포함 — GitHub Secrets를 재설정해주세요.';
+      updateItem(idx, { status: 'error', progress: 0, errorMsg: msg });
+      return { ok: false, error: msg };
+    }
+    if (!/^[\x20-\x7E]+$/.test(supabaseUrl)) {
+      const msg = 'Supabase URL에 비정상 문자 포함 — GitHub Secrets를 재설정해주세요.';
       updateItem(idx, { status: 'error', progress: 0, errorMsg: msg });
       return { ok: false, error: msg };
     }
