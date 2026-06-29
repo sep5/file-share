@@ -43,8 +43,9 @@ function FileUploader({ onUploadSuccess, onError }) {
 
     if (storageErr) {
       console.error('[Storage] 업로드 실패:', storageErr);
-      updateItem(idx, { status: 'error', progress: 0, errorMsg: storageErr.message });
-      return false;
+      const msg = storageErr.message ?? '알 수 없는 오류';
+      updateItem(idx, { status: 'error', progress: 0, errorMsg: msg });
+      return { ok: false, error: msg };
     }
 
     updateItem(idx, { progress: 70 });
@@ -64,14 +65,14 @@ function FileUploader({ onUploadSuccess, onError }) {
 
     if (dbErr) {
       console.error('[DB] 메타데이터 저장 실패:', dbErr);
-      /* Storage에 올라간 파일 롤백 */
       await supabase.storage.from('shared-files').remove([safePath]);
-      updateItem(idx, { status: 'error', progress: 0, errorMsg: dbErr.message });
-      return false;
+      const msg = dbErr.message ?? '메타데이터 저장 실패';
+      updateItem(idx, { status: 'error', progress: 0, errorMsg: msg });
+      return { ok: false, error: msg };
     }
 
     updateItem(idx, { status: 'done', progress: 100 });
-    return true;
+    return { ok: true };
   };
 
   const handleFiles = async (fileList) => {
@@ -83,15 +84,23 @@ function FileUploader({ onUploadSuccess, onError }) {
     setIsUploading(true);
 
     let successCount = 0;
+    let lastError = '';
     for (let i = 0; i < files.length; i++) {
-      const ok = await uploadSingle(files[i], i);
-      if (ok) successCount++;
+      const result = await uploadSingle(files[i], i);
+      if (result.ok) {
+        successCount++;
+      } else {
+        lastError = result.error ?? '';
+      }
     }
 
     setIsUploading(false);
     if (successCount > 0) onUploadSuccess();
-    if (successCount < files.length)
-      onError(`${files.length - successCount}개 파일 업로드에 실패했습니다.`);
+    if (successCount < files.length) {
+      const failCount = files.length - successCount;
+      const detail = lastError ? ` (${lastError})` : '';
+      onError(`${failCount}개 파일 업로드에 실패했습니다.${detail}`);
+    }
 
     setTimeout(() => setUploadItems([]), 3000);
   };

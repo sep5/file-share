@@ -38,15 +38,26 @@ function FileCard({ file, onDelete }) {
 
   const handleDownload = async () => {
     try {
-      const res = await fetch(file.file_url);
+      const res = await fetch(file.file_url, { mode: 'cors' });
+      if (!res.ok) throw new Error('fetch failed');
       const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
+      link.href = blobUrl;
       link.download = file.file_name;
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(link.href);
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
     } catch {
-      window.open(file.file_url, '_blank');
+      /* CORS 제한 시 a 태그 직접 클릭으로 fallback */
+      const link = document.createElement('a');
+      link.href = file.file_url;
+      link.download = file.file_name;
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
