@@ -33,15 +33,25 @@ function FileUploader({ onUploadSuccess, onError }) {
   const uploadSingle = async (file, idx) => {
     const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : 'bin';
     const safePath = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
-    const contentType = file.type || 'application/octet-stream';
+
+    /* Content-Type을 HTTP 헤더 안전 ASCII 문자(0x20-0x7E)로 검증
+       일부 브라우저·OS에서 file.type에 비 ASCII 반환 시 헤더 에러 방지 */
+    const rawType = typeof file.type === 'string' ? file.type : '';
+    const contentType = /^[\x20-\x7E]+$/.test(rawType)
+      ? rawType
+      : 'application/octet-stream';
+
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+    if (!supabaseUrl || !supabaseKey) {
+      const msg = 'Supabase 환경변수 누락 — 관리자에게 문의하세요.';
+      updateItem(idx, { status: 'error', progress: 0, errorMsg: msg });
+      return { ok: false, error: msg };
+    }
+
     updateItem(idx, { status: 'uploading', progress: 10 });
 
-    /* supabase-js Storage 클라이언트 우회 — 내부 라이브러리가 헤더 생성 시
-       한국어 파일명을 Content-Disposition에 삽입해 ISO-8859-1 에러를 일으키므로
-       Fetch API로 직접 Storage REST API를 호출 */
     let buffer;
     try {
       buffer = await file.arrayBuffer();
@@ -73,7 +83,7 @@ function FileUploader({ onUploadSuccess, onError }) {
       }
       uploadOk = true;
     } catch (e) {
-      const msg = e.message ?? 'Storage 업로드 실패';
+      const msg = `${e.name}: ${e.message}`;
       updateItem(idx, { status: 'error', progress: 0, errorMsg: msg });
       return { ok: false, error: msg };
     }
