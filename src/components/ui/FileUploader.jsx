@@ -11,7 +11,7 @@
 import { useState, useRef } from 'react';
 import {
   Box, Typography, Button, LinearProgress,
-  List, ListItem, ListItemIcon, ListItemText, Chip,
+  List, ListItem, ListItemIcon, ListItemText, Chip, Tooltip,
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -42,8 +42,9 @@ function FileUploader({ onUploadSuccess, onError }) {
       .upload(safePath, file, { upsert: false });
 
     if (storageErr) {
+      const parts = [storageErr.statusCode, storageErr.error, storageErr.message].filter(Boolean);
+      const msg = parts.join(' | ') || '알 수 없는 오류';
       console.error('[Storage] 업로드 실패:', storageErr);
-      const msg = storageErr.message ?? '알 수 없는 오류';
       updateItem(idx, { status: 'error', progress: 0, errorMsg: msg });
       return { ok: false, error: msg };
     }
@@ -100,9 +101,10 @@ function FileUploader({ onUploadSuccess, onError }) {
       const failCount = files.length - successCount;
       const detail = lastError ? ` (${lastError})` : '';
       onError(`${failCount}개 파일 업로드에 실패했습니다.${detail}`);
+      /* 에러 있을 때는 목록 유지, 성공만 있을 때 3초 후 제거 */
+    } else {
+      setTimeout(() => setUploadItems([]), 3000);
     }
-
-    setTimeout(() => setUploadItems([]), 3000);
   };
 
   const handleDrop = (e) => {
@@ -216,12 +218,14 @@ function FileUploader({ onUploadSuccess, onError }) {
                         <CheckCircleIcon sx={{ fontSize: 16, color: '#10B981' }} />
                       )}
                       {item.status === 'error' && (
-                        <Chip
-                          label={item.errorMsg ?? '실패'}
-                          size='small'
-                          icon={<ErrorIcon style={{ fontSize: 12 }} />}
-                          sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#FEF2F2', color: '#EF4444', maxWidth: 180 }}
-                        />
+                        <Tooltip title={item.errorMsg ?? '실패'} placement='top'>
+                          <Chip
+                            label={item.errorMsg ?? '실패'}
+                            size='small'
+                            icon={<ErrorIcon style={{ fontSize: 12 }} />}
+                            sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#FEF2F2', color: '#EF4444', maxWidth: 320 }}
+                          />
+                        </Tooltip>
                       )}
                       {item.status === 'uploading' && (
                         <Chip label='업로드 중' size='small' sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#EFF6FF', color: '#3B82F6' }} />
