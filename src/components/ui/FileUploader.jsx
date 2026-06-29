@@ -31,49 +31,74 @@ function FileUploader({ onUploadSuccess, onError }) {
     setUploadItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
 
   const uploadSingle = async (file, idx) => {
-    /* 한글·공백·특수문자가 있는 파일명을 UUID 기반 경로로 안전하게 변환 */
     const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : 'bin';
     const safePath = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
+    const contentType = file.type || 'application/octet-stream';
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
     updateItem(idx, { status: 'uploading', progress: 10 });
 
-    /* File 객체를 ArrayBuffer로 변환 — 원본 파일명이 HTTP 헤더에 포함되지 않아
-       한국어·특수문자 파일명의 ISO-8859-1 범위 초과 에러를 방지 */
-    const buffer = await file.arrayBuffer();
+    /* supabase-js Storage 클라이언트 우회 — 내부 라이브러리가 헤더 생성 시
+       한국어 파일명을 Content-Disposition에 삽입해 ISO-8859-1 에러를 일으키므로
+       Fetch API로 직접 Storage REST API를 호출 */
+    let buffer;
+    try {
+      buffer = await file.arrayBuffer();
+    } catch (e) {
+      const msg = '파일 읽기 실패: ' + (e.message ?? '');
+      updateItem(idx, { status: 'error', progress: 0, errorMsg: msg });
+      return { ok: false, error: msg };
+    }
 
-    const { error: storageErr } = await supabase.storage
-      .from('shared-files')
-      .upload(safePath, buffer, {
-        contentType: file.type || 'application/octet-stream',
-        upsert: false,
-      });
-
-    if (storageErr) {
-      const parts = [storageErr.statusCode, storageErr.error, storageErr.message].filter(Boolean);
-      const msg = parts.join(' | ') || '알 수 없는 오류';
-      console.error('[Storage] 업로드 실패:', storageErr);
+    let uploadOk = false;
+    try {
+      const res = await fetch(
+        `${supabaseUrl}/storage/v1/object/shared-files/${safePath}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': contentType,
+            'x-upsert': 'false',
+          },
+          body: buffer,
+        }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const msg = `${res.status} | ${body.message || body.error || res.statusText}`;
+        updateItem(idx, { status: 'error', progress: 0, errorMsg: msg });
+        return { ok: false, error: msg };
+      }
+      uploadOk = true;
+    } catch (e) {
+      const msg = e.message ?? 'Storage 업로드 실패';
       updateItem(idx, { status: 'error', progress: 0, errorMsg: msg });
       return { ok: false, error: msg };
     }
 
     updateItem(idx, { progress: 70 });
 
-    const { data: urlData } = supabase.storage
-      .from('shared-files')
-      .getPublicUrl(safePath);
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/shared-files/${safePath}`;
 
     const { error: dbErr } = await supabase.from('files').insert({
       file_name: file.name,
-      file_url:  urlData.publicUrl,
+      file_url:  publicUrl,
       file_path: safePath,
       file_size: file.size,
-      file_type: file.type || 'application/octet-stream',
+      file_type: contentType,
       category:  getCategory(file.name),
     });
 
     if (dbErr) {
       console.error('[DB] 메타데이터 저장 실패:', dbErr);
-      await supabase.storage.from('shared-files').remove([safePath]);
+      if (uploadOk) {
+        await fetch(
+          `${supabaseUrl}/storage/v1/object/shared-files/${safePath}`,
+          { method: 'DELETE', headers: { 'Authorization': `Bearer ${supabaseKey}` } }
+        );
+      }
       const msg = dbErr.message ?? '메타데이터 저장 실패';
       updateItem(idx, { status: 'error', progress: 0, errorMsg: msg });
       return { ok: false, error: msg };
