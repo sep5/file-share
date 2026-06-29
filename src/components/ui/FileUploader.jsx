@@ -31,15 +31,19 @@ function FileUploader({ onUploadSuccess, onError }) {
     setUploadItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
 
   const uploadSingle = async (file, idx) => {
-    const filePath = `${Date.now()}_${file.name}`;
+    /* 한글·공백·특수문자가 있는 파일명을 UUID 기반 경로로 안전하게 변환 */
+    const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : 'bin';
+    const safePath = `${Date.now()}-${crypto.randomUUID()}.${ext}`;
+
     updateItem(idx, { status: 'uploading', progress: 10 });
 
     const { error: storageErr } = await supabase.storage
       .from('shared-files')
-      .upload(filePath, file, { upsert: false });
+      .upload(safePath, file, { upsert: false });
 
     if (storageErr) {
-      updateItem(idx, { status: 'error', progress: 0 });
+      console.error('[Storage] 업로드 실패:', storageErr);
+      updateItem(idx, { status: 'error', progress: 0, errorMsg: storageErr.message });
       return false;
     }
 
@@ -47,19 +51,22 @@ function FileUploader({ onUploadSuccess, onError }) {
 
     const { data: urlData } = supabase.storage
       .from('shared-files')
-      .getPublicUrl(filePath);
+      .getPublicUrl(safePath);
 
     const { error: dbErr } = await supabase.from('files').insert({
       file_name: file.name,
       file_url:  urlData.publicUrl,
-      file_path: filePath,
+      file_path: safePath,
       file_size: file.size,
       file_type: file.type || 'application/octet-stream',
       category:  getCategory(file.name),
     });
 
     if (dbErr) {
-      updateItem(idx, { status: 'error', progress: 0 });
+      console.error('[DB] 메타데이터 저장 실패:', dbErr);
+      /* Storage에 올라간 파일 롤백 */
+      await supabase.storage.from('shared-files').remove([safePath]);
+      updateItem(idx, { status: 'error', progress: 0, errorMsg: dbErr.message });
       return false;
     }
 
@@ -200,7 +207,12 @@ function FileUploader({ onUploadSuccess, onError }) {
                         <CheckCircleIcon sx={{ fontSize: 16, color: '#10B981' }} />
                       )}
                       {item.status === 'error' && (
-                        <ErrorIcon sx={{ fontSize: 16, color: '#EF4444' }} />
+                        <Chip
+                          label={item.errorMsg ?? '실패'}
+                          size='small'
+                          icon={<ErrorIcon style={{ fontSize: 12 }} />}
+                          sx={{ height: 18, fontSize: '0.62rem', bgcolor: '#FEF2F2', color: '#EF4444', maxWidth: 180 }}
+                        />
                       )}
                       {item.status === 'uploading' && (
                         <Chip label='업로드 중' size='small' sx={{ height: 18, fontSize: '0.65rem', bgcolor: '#EFF6FF', color: '#3B82F6' }} />
