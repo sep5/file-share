@@ -37,9 +37,16 @@ function FileUploader({ onUploadSuccess, onError }) {
 
     updateItem(idx, { status: 'uploading', progress: 10 });
 
+    /* File 객체를 ArrayBuffer로 변환 — 원본 파일명이 HTTP 헤더에 포함되지 않아
+       한국어·특수문자 파일명의 ISO-8859-1 범위 초과 에러를 방지 */
+    const buffer = await file.arrayBuffer();
+
     const { error: storageErr } = await supabase.storage
       .from('shared-files')
-      .upload(safePath, file, { upsert: false });
+      .upload(safePath, buffer, {
+        contentType: file.type || 'application/octet-stream',
+        upsert: false,
+      });
 
     if (storageErr) {
       const parts = [storageErr.statusCode, storageErr.error, storageErr.message].filter(Boolean);
