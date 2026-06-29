@@ -1,0 +1,35 @@
+:root {
+  --color-primary:       #3B82F6;
+  --color-primary-dark:  #2563EB;
+  --color-primary-light: #DBEAFE;
+  --color-bg:            #F8FAFC;
+  --color-surface:       #FFFFFF;
+  --color-border:        #E2E8F0;
+  --color-text-primary:  #1E293B;
+  --color-text-secondary:#64748B;
+  --color-text-muted:    #94A3B8;
+  --color-image:         #8B5CF6;
+  --color-doc:           #3B82F6;
+  --color-zip:           #F59E0B;
+  --color-design:        #EC4899;
+  --color-other:         #64748B;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  background-color: var(--color-bg);
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
