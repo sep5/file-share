@@ -62,7 +62,13 @@ function FileCard({ file, onDelete }) {
   };
 
   return (
-    <Card>
+    <Card
+      sx={{
+        border: '1px solid transparent',
+        transition: 'border-color 0.2s',
+        '&:hover': { borderColor: '#3B82F6' },
+      }}
+    >
       <CardContent sx={{ pb: 1 }}>
         {/* 파일 아이콘 */}
         <Box
