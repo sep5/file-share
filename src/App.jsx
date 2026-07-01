@@ -6,11 +6,13 @@ import Header from './components/common/Header';
 import CategoryTabs from './components/ui/CategoryTabs';
 import FileUploader from './components/ui/FileUploader';
 import FileList from './components/ui/FileList';
+import SearchBar from './components/ui/SearchBar';
 
 function App() {
   const [files, setFiles] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   const showSnackbar = (message, severity = 'success') =>
@@ -61,9 +63,10 @@ function App() {
     return acc;
   }, {});
 
-  /* 필터링된 파일 목록 */
-  const filteredFiles =
-    activeCategory === 'all' ? files : files.filter((f) => f.category === activeCategory);
+  /* 카테고리 + 검색어 복합 필터 */
+  const filteredFiles = files
+    .filter((f) => activeCategory === 'all' || f.category === activeCategory)
+    .filter((f) => !searchQuery || f.file_name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -91,12 +94,18 @@ function App() {
             />
           </Box>
 
+          {/* 검색창 */}
+          <Box sx={{ mb: 3 }}>
+            <SearchBar value={searchQuery} onChange={setSearchQuery} />
+          </Box>
+
           {/* 파일 목록 */}
           <FileList
             files={filteredFiles}
             isLoading={isLoading}
             onDelete={handleDelete}
             onRefresh={fetchFiles}
+            searchQuery={searchQuery}
           />
         </Container>
       </Box>
